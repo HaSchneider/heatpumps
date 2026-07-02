@@ -1237,12 +1237,40 @@ if mode == 'Auslegung':
                         """
                         )
 
+                
+
+                
+                
+                with st.expander('Modell exportieren'):
+                    debug_json = json.dumps(
+                        {'model_key': hp_model_name, 'params': params}, indent=2
+                    )
+                    col1, col2 = st.columns([1,1])
+                    with col1:
+                        st.download_button(
+                            label='Download Heatpumps Modell als JSON',
+                            data=debug_json,
+                            file_name=f"{params['setup']['type']}_debug.json",
+                            mime='application/json'
+                        )
+                    with col2:
+                        st.download_button(
+                            label='Download Tespy Modell als JSON',
+                            data=json.dumps(ss.hp.nw.export(), indent=2),
+                            file_name=f"{params['setup']['type']}_tespy.json",
+                            mime='application/json'
+                        )
+                    #st.code(debug_json, language='json')
+                
                 st.info(
                     'Um die Teillast zu berechnen, drücke auf "Teillast '
                     + 'simulieren".'
                     )
 
+                
                 st.button('Teillast simulieren', on_click=switch2partload)
+
+
 
 if mode == 'Teillast':
     # %% MARK: Offdesign Simulation
