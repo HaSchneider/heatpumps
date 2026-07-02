@@ -899,15 +899,15 @@ if mode == 'Auslegung':
                 col1, col2, col3, col4 = st.columns(4)
                 col1.metric('COP', round(ss.hp.cop, 2))
                 Q_dot_ab = ss.hp.heat_output / 1e6
-                col2.metric('Q_dot_ab', f"{Q_dot_ab:.2f} MW")
+                col2.metric('$\dot{Q}_{ab}$', f"{Q_dot_ab:.2f} MW")
                 col3.metric(
-                    'P_zu',
+                    '$P_{zu}$',
                     f"{ss.hp.power_input/1e6:.2f} MW"
                     )
                 Q_dot_zu = abs(
                     ss.hp.comps['evap'].Q.val/1e6
                     )
-                col4.metric('Q_dot_zu', f'{Q_dot_zu:.2f} MW')
+                col4.metric('$\dot{Q}_{zu}$', f'{Q_dot_zu:.2f} MW')
 
                 with st.expander('Topologie & Kältemittel'):
                     # %% Topology & Refrigerant
