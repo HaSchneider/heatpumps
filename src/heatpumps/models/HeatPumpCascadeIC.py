@@ -26,9 +26,7 @@ class HeatPumpCascadeIC(HeatPumpCascadeBase):
     def generate_components(self):
         """Initialize components of heat pump."""
         # Heat source
-        self.comps['hs_ff'] = Source('Heat Source Feed Flow')
-        self.comps['hs_bf'] = Sink('Heat Source Back Flow')
-        self.comps['hs_pump'] = Pump('Heat Source Recirculation Pump')
+        self.generate_heat_source_components()
 
         # Heat sink
         self.comps['cons_cc'] = CycleCloser('Consumer Cycle Closer')
@@ -61,7 +59,6 @@ class HeatPumpCascadeIC(HeatPumpCascadeBase):
         self.comps['motor_HT_comp1'] = Motor(self.comps['HT_comp1'].label + ' Motor')
         self.comps['motor_LT_comp2'] = Motor(self.comps['LT_comp2'].label + ' Motor')
         self.comps['motor_HT_comp2'] = Motor(self.comps['HT_comp2'].label + ' Motor')
-        self.comps['motor_hs_pump'] = Motor(self.comps['hs_pump'].label + ' Motor')
         self.comps['motor_cons_pump'] = Motor(self.comps['cons_pump'].label + ' Motor')
 
     def generate_connections(self):
@@ -112,15 +109,7 @@ class HeatPumpCascadeIC(HeatPumpCascadeBase):
             self.comps['LT_comp2'], 'out1', self.comps['inter'], 'in1', 'D6'
         )
 
-        self.conns['B1'] = Connection(
-            self.comps['hs_ff'], 'out1', self.comps['evap'], 'in1', 'B1'
-        )
-        self.conns['B2'] = Connection(
-            self.comps['evap'], 'out1', self.comps['hs_pump'], 'in1', 'B2'
-        )
-        self.conns['B3'] = Connection(
-            self.comps['hs_pump'], 'out1', self.comps['hs_bf'], 'in1', 'B3'
-        )
+        self.generate_heat_source_connections()
 
         self.conns['C0'] = Connection(
             self.comps['cons'], 'out1', self.comps['cons_cc'], 'in1', 'C0'
@@ -181,19 +170,6 @@ class HeatPumpCascadeIC(HeatPumpCascadeBase):
 
         self.nw.add_conns(*power_conns)
 
-
-        # Connection labels bounding the system for the exergy
-        # analysis, replacing the connections previously
-        # aggregated through Buses.
-        self.exergy_boundary = {
-            'fuel': {
-                'inputs': ['E_grid', 'B1'], 'outputs': ['B3']
-                },
-            'product': {
-                'inputs': ['C3'], 'outputs': ['C1']
-                }
-            }
-
     def init_simulation(self, **kwargs):
         """Perform initial parametrization with starting values."""
         # Components
@@ -210,7 +186,6 @@ class HeatPumpCascadeIC(HeatPumpCascadeBase):
         self.comps['LT_comp2'].set_attr(eta_s=self.params['LT_comp2']['eta_s'])
         self.comps['HT_comp1'].set_attr(eta_s=self.params['HT_comp1']['eta_s'])
         self.comps['HT_comp2'].set_attr(eta_s=self.params['HT_comp2']['eta_s'])
-        self.comps['hs_pump'].set_attr(eta_s=self.params['hs_pump']['eta_s'])
         self.comps['cons_pump'].set_attr(
             eta_s=self.params['cons_pump']['eta_s']
         )
@@ -267,12 +242,7 @@ class HeatPumpCascadeIC(HeatPumpCascadeBase):
         self.conns['D0'].set_attr(p=p_cond1, fluid={self.wf1: 1})
         self.conns['D5'].set_attr(p=p_mid1, h=h_start_mid1)
         # Heat source
-        self.conns['B1'].set_attr(
-            T=self.params['B1']['T'], p=self.params['B1']['p'],
-            fluid={self.so: 1}
-        )
-        self.conns['B2'].set_attr(T=self.params['B2']['T'])
-        self.conns['B3'].set_attr(p=self.params['B1']['p'])
+        self.parametrize_heat_source()
 
         # Heat sink
         self.conns['C3'].set_attr(
@@ -302,27 +272,13 @@ class HeatPumpCascadeIC(HeatPumpCascadeBase):
         self.comps['inter'].set_attr(ttd_u=self.params['inter']['ttd_u'])
         self.conns['A3'].set_attr(T=self.T_mid - self.params['inter']['ttd_u'] / 2)
 
-        # The intercooler outlet is specified by its temperature, clamped to
-        # the dew line where cooling by dT_ic would otherwise cross into the
-        # two-phase region. The superheated starting state set up in
-        # init_simulation lets this converge in a single solver run.
-        T_bp1 = PSI('T', 'P', self.conns['D4'].p.val_SI, 'Q', 1, self.wf1) - 273.15
-        T_bp2 = PSI('T', 'P', self.conns['A4'].p.val_SI, 'Q', 1, self.wf2) - 273.15
-
-        if abs(T_bp2 - self.conns['A4'].T.val) < abs(self.params['ic2']['dT_ic']):
-            self.conns['A5'].set_attr(td_dew=1)
-        else:
-            self.conns['A5'].set_attr(
-                T=Ref(self.conns['A4'], 1, self.params['ic2']['dT_ic'])
-            )
-        if abs(T_bp1 - self.conns['D4'].T.val) < abs(self.params['ic1']['dT_ic']):
-            self.conns['D5'].set_attr(td_dew=1)
-        else:
-            self.conns['D5'].set_attr(
-                T=Ref(self.conns['D4'], 1, self.params['ic1']['dT_ic'])
-            )
-
-        self._solve_model(**kwargs)
+        self._solve_with_intercoolers(
+            [
+                ('D4', 'D5', 'ic1', self.params['ic1']['dT_ic'], self.wf1),
+                ('A4', 'A5', 'ic2', self.params['ic2']['dT_ic'], self.wf2)
+            ],
+            **kwargs
+        )
 
         self.m_design = self.conns['A0'].m.val
 

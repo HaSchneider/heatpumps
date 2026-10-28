@@ -5,7 +5,9 @@ heatpumps
 Welcome to the official online documentation of **heatpumps**. Try it out right
 now!
 
-.. image:: https://static.streamlit.io/badges/streamlit_badge_black_white.svg
+|streamlit_badge|
+
+.. |streamlit_badge| image:: https://static.streamlit.io/badges/streamlit_badge_black_white.svg
    :target: https://heatpumps.streamlit.app/
    :alt: Streamlit App
 
@@ -14,6 +16,7 @@ Key Features
 
 - Steady-state simulation of design and partload operation based on `TESPy <https://github.com/oemof/tespy>`__
 - Parametrization and result visualisation through a `Streamlit <https://github.com/streamlit/streamlit>`__ dashboard
+- Water-water and air-water heat pumps
 - Industry standard, as well as topologies still in research and developement, supported
 - Sub- and transcritical processes
 - Wide variety of refrigerants due to the integration of `CoolProp <https://github.com/CoolProp/CoolProp>`__
@@ -55,9 +58,11 @@ Documentation
 -------------
 
 The Documentation chapter goes deeper where the Getting Started one stops. It
-contains a thorough explanation of the methodology used, as well as the full
-model API. Futhermore, a change log documents the developement process and the
-Bibliography holds all references mentioned within the whole online docs.
+contains a thorough explanation of the methodology used, a reference of all
+available model setups with their topologies and default parameters, as well as
+the full model API. Futhermore, a change log documents the developement process
+and the Bibliography holds all references mentioned within the whole online
+docs.
 
 Galary
 ------
@@ -72,6 +77,33 @@ The Development chapter contains information on what and how you can contribute
 to the developement of heatpumps. This can be as easy as reporting a bug you
 stumbled upon while using heatpumps or requesting a feature you feel is missing
 currently.
+
+Citing heatpumps
+================
+
+|doi_badge|
+
+.. |doi_badge| image:: https://zenodo.org/badge/DOI/10.5281/zenodo.23341865.svg
+   :target: https://doi.org/10.5281/zenodo.23341865
+   :alt: DOI
+
+If you use heatpumps in your work, we kindly ask you to cite it. The DOI below 
+always resolves to the latest version and  individual releases can be found on
+`Zenodo <https://doi.org/10.5281/zenodo.23341865>`__. The citation metadata is
+also available in the
+`CITATION.cff <https://github.com/jfreissmann/heatpumps/blob/main/CITATION.cff>`__
+file.
+
+.. code-block:: bibtex
+
+    @misc{heatpumps,
+      author    = {Freißmann, Jonas and Fritz, Malte and Tuschy, Ilja and Thomas, Bilwin and Witte, Francesco and Schneider, Hannes},
+      title     = {heatpumps: A heat pump simulation model library and dashboard},
+      year      = {2026},
+      publisher = {Zenodo},
+      doi       = {10.5281/zenodo.23341865},
+      url       = {https://doi.org/10.5281/zenodo.23341865}
+    }
 
 License
 =======

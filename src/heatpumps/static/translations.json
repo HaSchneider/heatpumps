@@ -79,6 +79,18 @@
         "ENG": "Heat source",
         "GER": "Wärmequelle"
     },
+    "sb_source_fluid": {
+        "ENG": "Heat source medium",
+        "GER": "Wärmequellenmedium"
+    },
+    "source_fluid_water": {
+        "ENG": "Water",
+        "GER": "Wasser"
+    },
+    "source_fluid_air": {
+        "ENG": "Air",
+        "GER": "Luft"
+    },
     "sb_source_temp_ff": {
         "ENG": "Temperature feed flow",
         "GER": "Temperatur Vorlauf"
@@ -90,6 +102,14 @@
     "sb_source_invalid_temp_diff": {
         "ENG": "The return flow temperature has to be lower than the feed flow temperature.",
         "GER": "Die Rücklauftemperatur muss niedriger sein, als die  Vorlauftemperatur."
+    },
+    "sb_source_ttd_evap": {
+        "ENG": "Terminal temperature difference evaporator",
+        "GER": "Grädigkeit Verdampfer"
+    },
+    "sb_source_ttd_evap_help": {
+        "ENG": "Difference between the return flow temperature of the heat source and the evaporation temperature.",
+        "GER": "Differenz zwischen der Rücklauftemperatur der Wärmequelle und der Verdampfungstemperatur."
     },
     "sb_expd_heat_sink": {
         "ENG": "Heat sink",
@@ -111,9 +131,53 @@
         "ENG": "The temperature of the heat sink has to be higher than the heat source.",
         "GER": "Die Temperatur der Wärmesenke muss höher sein, als die der Wärmequelle."
     },
+    "sb_sink_ttd_cond": {
+        "ENG": "Terminal temperature difference condenser",
+        "GER": "Grädigkeit Verflüssiger"
+    },
+    "sb_sink_ttd_cond_help": {
+        "ENG": "Difference between the condensation temperature and the feed flow temperature of the heat sink.",
+        "GER": "Differenz zwischen der Verflüssigungstemperatur und der Vorlauftemperatur der Wärmesenke."
+    },
+    "sb_sink_ttd_trans": {
+        "ENG": "Terminal temperature difference transcritical heat exchanger",
+        "GER": "Grädigkeit transkritischer Wärmeübertrager"
+    },
+    "sb_sink_ttd_trans_help": {
+        "ENG": "Difference between the outlet temperature of the refrigerant and the return flow temperature of the heat sink.",
+        "GER": "Differenz zwischen der Austrittstemperatur des Kältemittels und der Rücklauftemperatur der Wärmesenke."
+    },
+    "sb_expd_inter": {
+        "ENG": "Intermediate heat exchangers",
+        "GER": "Zwischenwärmeübertrager"
+    },
+    "sb_inter_ttd_inter": {
+        "ENG": "Terminal temperature difference intermediate heat exchanger",
+        "GER": "Grädigkeit Zwischenwärmeübertrager"
+    },
+    "sb_inter_ttd_inter_help": {
+        "ENG": "Difference between the condensation temperature of the low temperature cycle and the evaporation temperature of the high temperature cycle.",
+        "GER": "Differenz zwischen der Verflüssigungstemperatur des Niedertemperaturkreises und der Verdampfungstemperatur des Hochtemperaturkreises."
+    },
+    "sb_inter_ttd_econ": {
+        "ENG": "Terminal temperature difference economizer",
+        "GER": "Grädigkeit Economizer"
+    },
+    "sb_inter_ttd_econ_HT": {
+        "ENG": "Terminal temperature difference economizer (HT)",
+        "GER": "Grädigkeit Economizer (HTK)"
+    },
+    "sb_inter_ttd_econ_LT": {
+        "ENG": "Terminal temperature difference economizer (LT)",
+        "GER": "Grädigkeit Economizer (NTK)"
+    },
+    "sb_inter_ttd_econ_help": {
+        "ENG": "Difference between the outlet temperature of the subcooled refrigerant and the evaporation temperature at intermediate pressure.",
+        "GER": "Differenz zwischen der Austrittstemperatur des unterkühlten Kältemittels und der Verdampfungstemperatur auf Zwischendruck."
+    },
     "sb_expd_ihx": {
         "ENG": "Internal heat exchanger",
-        "GER": "Interne Wärmerübertragung"
+        "GER": "Interne Wärmeübertragung"
     },
     "sb_ihx_superheat": {
         "ENG": "Superheating/Subcooling",
@@ -280,8 +344,8 @@
         "GER": "🧮 Teillast simulieren"
     },
     "main_landing_txt": {
-        "ENG": "The heat pump simulator *heatpumps* is a powerful simulation software for analyzing and evaluating heat pumps.\n\nThis dashboard allows users to control a wide variety of complex thermodynamic models using numerical methods via a simple interface, without requiring specialized knowledge of these systems. This includes both the design of heat pumps and the simulation of their steady-state part-load operation. The simulation results provide insights into the basic behavior, the COP, state variables, and costs of the individual components, as well as the total investment costs of the heat pump under consideration. This enables users to address complex issues that regularly arise in the design and planning of heat pumps.\n\n### Key Features\n\n- Stationary design and partial-load simulation based on [TESPy](https://github.com/oemof/tespy)\n- Parameterization and result visualization using [Streamlit](https://github.com/streamlit/streamlit) dashboard\n- Circuit topologies commonly used in industry, research, and development\n- Subcritical and transcritical processes\n- Wide selection of working fluids due to the integration of [CoolProp](https://github.com/CoolProp/CoolProp)",
-        "GER": "Der Wärmepumpensimulator *heatpumps* ist eine leistungsfähige Simulationssoftware zur Analyse und Bewertung von Wärmepumpen.\n\nMit diesem Dashboard lassen sich eine Vielzahl komplexer thermodynamischer Anlagenmodelle mithilfe numerischer Methoden über eine einfache Oberfläche steuern, ohne Fachkenntnisse über diese vorauszusetzen. Dies beinhaltet sowohl die Auslegung von Wärmepumpen, als auch die Simulation ihres stationären Teillastbetriebs. Dabei geben die Ergebnisse der Simulationen Aufschluss über das prinzipielle Verhalten, den COP, Zustandsgrößen und Kosten der einzelnen Komponenten sowie Gesamtinvestitionskosten der betrachteten Wärmepumpe. Damit wird Zugang zu komplexen Fragestellungen ermöglicht, die regelmäßig in der Konzeption und Planung von Wärmepumpen aufkommen.\n\n### Key Features\n\n- Stationäre Auslegungs- und Teillastsimulation basierend auf [TESPy](https://github.com/oemof/tespy)\n- Parametrisierung and Ergebnisvisualisierung mithilfe eines [Streamlit](https://github.com/streamlit/streamlit) Dashboards\n- In der Industrie, Forschung und Entwicklung gängige Schaltungstopologien\n- Sub- und transkritische Prozesse\n- Große Auswahl an Arbeitsmedien aufgrund der Integration von [CoolProp](https://github.com/CoolProp/CoolProp)"
+        "ENG": "The heat pump simulator *heatpumps* is a powerful simulation software for analyzing and evaluating heat pumps.\n\nThis dashboard allows users to control a wide variety of complex thermodynamic models using numerical methods via a simple interface, without requiring specialized knowledge of these systems. This includes both the design of heat pumps and the simulation of their steady-state part-load operation. The simulation results provide insights into the basic behavior, the COP, state variables, and costs of the individual components, as well as the total investment costs of the heat pump under consideration. This enables users to address complex issues that regularly arise in the design and planning of heat pumps.\n\n### Key Features\n\n- Stationary design and partial-load simulation based on [TESPy](https://github.com/oemof/tespy)\n- Parameterization and result visualization using [Streamlit](https://github.com/streamlit/streamlit) dashboard\n- Water-water and air-water heat pumps\n- Cycle topologies commonly used in industry, research, and development\n- Subcritical and transcritical processes\n- Wide selection of working fluids due to the integration of [CoolProp](https://github.com/CoolProp/CoolProp)",
+        "GER": "Der Wärmepumpensimulator *heatpumps* ist eine leistungsfähige Simulationssoftware zur Analyse und Bewertung von Wärmepumpen.\n\nMit diesem Dashboard lassen sich eine Vielzahl komplexer thermodynamischer Anlagenmodelle mithilfe numerischer Methoden über eine einfache Oberfläche steuern, ohne Fachkenntnisse über diese vorauszusetzen. Dies beinhaltet sowohl die Auslegung von Wärmepumpen, als auch die Simulation ihres stationären Teillastbetriebs. Dabei geben die Ergebnisse der Simulationen Aufschluss über das prinzipielle Verhalten, den COP, Zustandsgrößen und Kosten der einzelnen Komponenten sowie Gesamtinvestitionskosten der betrachteten Wärmepumpe. Damit wird Zugang zu komplexen Fragestellungen ermöglicht, die regelmäßig in der Konzeption und Planung von Wärmepumpen aufkommen.\n\n### Key Features\n\n- Stationäre Auslegungs- und Teillastsimulation basierend auf [TESPy](https://github.com/oemof/tespy)\n- Parametrisierung and Ergebnisvisualisierung mithilfe eines [Streamlit](https://github.com/streamlit/streamlit) Dashboards\n- Wasser-Wasser- und Luft-Wasser-Wärmepumpen\n- In der Industrie, Forschung und Entwicklung gängige Schaltungstopologien\n- Sub- und transkritische Prozesse\n- Große Auswahl an Arbeitsmedien aufgrund der Integration von [CoolProp](https://github.com/CoolProp/CoolProp)"
     },
     "main_btn_run_design": {
         "ENG": "Start design simulation",
@@ -350,6 +414,10 @@
     "design_sim_success": {
         "ENG": "The simulation of the heat pump design was successful.",
         "GER": "Die Simulation der Wärmepumpenauslegung war erfolgreich."
+    },
+    "design_sim_model_warning": {
+        "ENG": "The simulation converged, but the heat pump does not operate as designed:",
+        "GER": "Die Simulation ist konvergiert, die Wärmepumpe arbeitet jedoch nicht wie vorgesehen:"
     },
     "design_sim_error": {
         "ENG": "The following error occurred during the heat pump simulation. Please correct the input parameters and try again.\n\n",
@@ -447,6 +515,22 @@
         "ENG": "To calculate the part-load, click 'Run part-load simulation'.",
         "GER": "Um die Teillast zu berechnen, drücke auf 'Teillast simulieren'."
     },
+    "design_btn_export":{
+        "ENG":"💾 Save model",
+        "GER":"💾 Modell speichern"
+    },
+    "export_modal_header":{
+        "ENG":"💾 Save model",
+        "GER":"💾 Modell speichern"
+    },
+    "exp_mod_btn_heatpumps":{
+        "ENG":"Download heatpumps model as JSON",
+        "GER":"Heatpumps Modell als JSON Herunterladen"
+    },
+    "exp_mod_btn_tespy":{
+        "ENG":"Download TESPy model as JSON",
+        "GER":"TESPy Modell als JSON Herunterladen"
+    },
     "od_header": {
         "ENG": "Operating characteristics",
         "GER": "Betriebscharakteristik"
@@ -466,6 +550,14 @@
     "od_simu_success": {
         "ENG": "The simulation of the heat pump characteristics was successful.",
         "GER": "Die Simulation der Wärmepumpencharakteristika war erfolgreich."
+    },
+    "od_simu_partial_convergence": {
+        "ENG": "Only {n_converged} of {n_total} part-load operating points converged. Operating points that did not converge are missing from the diagrams.",
+        "GER": "Nur {n_converged} von {n_total} Teillastbetriebspunkten sind konvergiert. Nicht konvergierte Betriebspunkte fehlen in den Diagrammen."
+    },
+    "od_simu_no_convergence": {
+        "ENG": "The part-load simulation did not yield a usable characteristic: {n_converged} of {n_total} operating points converged. Please adjust the part-load range or the design parameters and try again.",
+        "GER": "Die Teillastsimulation hat keine verwertbare Kennlinie ergeben: {n_converged} von {n_total} Betriebspunkten sind konvergiert. Bitte passen Sie den Teillastbereich oder die Auslegungsparameter an und versuchen Sie es erneut."
     },
     "od_spinner_visu": {
         "ENG": "Results are being visualized...",
@@ -630,6 +722,14 @@
     "refrig_type_R124": {
         "ENG": "HCFC",
         "GER": "HCFC"
+    },
+    "refrig_name_R32": {
+        "ENG": "R32",
+        "GER": "R32"
+    },
+    "refrig_type_R32": {
+        "ENG": "HFC",
+        "GER": "HFC"
     },
     "refrig_name_R365mfc": {
         "ENG": "R365mfc",
@@ -887,6 +987,10 @@
         "ENG": "Heat Source Recirculation Pump",
         "GER": "Wärmequelle Umwälzpumpe"
     },
+    "comp_label_Heat_Source_Recirculation_Fan": {
+        "ENG": "Heat Source Recirculation Fan",
+        "GER": "Wärmequelle Lüfter"
+    },
     "comp_label_High_Pressure_Internal_Heat_Exchanger": {
         "ENG": "High Pressure Internal Heat Exchanger",
         "GER": "Interner Wärmeübertrager (Hochdruck)"
@@ -966,6 +1070,18 @@
         "ENG": "Product Exergy",
         "GER": "Exergieertrag"
     },
+    "comp_label_Exergy_Destruction": {
+        "ENG": "Exergy Destruction",
+        "GER": "Exergievernichtung"
+    },
+    "comp_label_Exergy_Loss": {
+        "ENG": "Exergy Loss",
+        "GER": "Exergieverlust"
+    },
+    "comp_label_net_suffix": {
+        "ENG": "(net)",
+        "GER": "(netto)"
+    },
     "comp_label_Injection_steam": {
         "ENG": "Injection steam",
         "GER": "Einspritzdampf"
@@ -1009,6 +1125,10 @@
     "comp_label_Electrical_Equipment": {
         "ENG": "Electrical Equipment",
         "GER": "Elektrische Ausrüstung"
+    },
+    "comp_label_Power_Distribution": {
+        "ENG": "Power Distribution",
+        "GER": "Stromverteilung"
     },
     "comp_label_Refrigerant": {
         "ENG": "Refrigerant",

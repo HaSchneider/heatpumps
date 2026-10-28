@@ -2,6 +2,7 @@ import collections
 import itertools
 import json
 import os
+import warnings
 from datetime import datetime
 from importlib import resources
 from time import time
@@ -11,15 +12,60 @@ import numpy as np
 import pandas as pd
 import platformdirs
 import plotly.graph_objects as go
+from CoolProp.CoolProp import PhaseSI
 from CoolProp.CoolProp import PropsSI as PSI
 from exerpy import ExergyAnalysis
-from exerpy.parser.from_tespy.tespy_config import EXERPY_TESPY_MAPPINGS
+from exerpy.analyses import _process_json
+from exerpy.parser.from_tespy.tespy_parser import to_exerpy
+from exerpy.visualization import SankeyBuilder
+from exerpy.visualization.colors import pale
 from fluprodia import FluidPropertyDiagram
 from scipy.interpolate import interpn
 from sklearn.linear_model import LinearRegression
+from tespy.components import Compressor, Motor, Pump, Sink, Source
+from tespy.components import SimpleHeatExchanger
+from tespy.connections import Connection, Ref
 from tespy.networks import Network
 from tespy.tools.characteristics import CharLine
 from tespy.tools.characteristics import load_default_char as ldc
+from tespy.tools.fluid_properties import h_mix_pQ
+
+
+SANKEY_COLORS = {
+    'E_F': '#00395B',
+    'E_P': '#B54036',
+    'E_L': '#EC6707',
+    'E_D': '#EC6707',
+    'work': '#BFBFBF',
+    'heat': '#BFBFBF',
+    'two-phase-fluid': '#74ADC0',
+    'node': '#EC6707'
+}
+
+# Node ids exerpy's `SankeyBuilder` uses for the system boundary nodes.
+SANKEY_TERMINAL_IDS = {
+    '__E_F__': 'E_F',
+    '__E_P__': 'E_P',
+    '__E_D__': 'E_D',
+    '__E_L__': 'E_L',
+    '__E_P_net__': 'E_P',
+    '__E_L_net__': 'E_L'
+}
+
+# Minimum superheat in K an intercooler leaves at its outlet. Cooling any
+# closer to the dew line would let the next compressor take in liquid.
+IC_MIN_SUPERHEAT = 1
+
+# Closing sentence of every thermodynamic plausibility error. Callers driving
+# the models in bulk match on it to tell implausible results from crashes.
+PLAUSIBILITY_HINT = (
+    'Please check the heat pump parameters and model for thermodynamic'
+    + ' plausibility.'
+)
+
+
+class IntercoolerBypassWarning(UserWarning):
+    """An intercooler was bypassed because its inlet had nothing to cool."""
 
 
 def grid_path_order(*ranges, current=None, max_step=1):
@@ -134,6 +180,7 @@ class HeatPumpBase:
         self.epsilon = np.nan
         self.solved_design = False
         self._design_state = None
+        self.model_warnings = []
 
         self._init_vals = {
             'm_dot_rel_econ_closed': 0.9,
@@ -147,6 +194,81 @@ class HeatPumpBase:
         self.wf = self.params['fluids']['wf']
         self.si = self.params['fluids']['si']
         self.so = self.params['fluids']['so']
+
+    def _source_is_gaseous(self):
+        """Return True if the heat source fluid is a gas at the B1 state.
+
+        The recirculation device is chosen from this: a liquid source
+        (e.g. water/brine) is driven by a Pump, a gaseous source
+        (e.g. air) by a Compressor acting as a fan. The structural
+        decision is made once at ``generate_components`` time and only
+        reads static parameters, never solved connection values, so it is
+        safe to call again during the offdesign sweep.
+        """
+        phase = PhaseSI(
+            'T', self.params['B1']['T'] + 273.15,
+            'P', self.params['B1']['p'] * 1e5, self.so
+            )
+        return 'gas' in phase.lower()
+
+    def generate_heat_source_components(self):
+        """Initialize the shared heat source subcycle components.
+
+        The recirculation device is stored under the key ``'hs_pump'``
+        regardless of whether it is a Pump or a Compressor, so the power
+        network wiring (``rotating_comps``, ``motor_hs_pump``,
+        ``E_hs_pump_in/out``) works unchanged for both.
+        """
+        self.comps['hs_ff'] = Source('Heat Source Feed Flow')
+        self.comps['hs_bf'] = Sink('Heat Source Back Flow')
+        if self._source_is_gaseous():
+            self.comps['hs_pump'] = Compressor(
+                'Heat Source Recirculation Fan'
+            )
+        else:
+            self.comps['hs_pump'] = Pump('Heat Source Recirculation Pump')
+        self.comps['motor_hs_pump'] = Motor(
+            self.comps['hs_pump'].label + ' Motor'
+            )
+
+    def generate_heat_source_connections(self):
+        """Initialize the shared heat source subcycle connections.
+
+        Only populates ``self.conns``; the connections are added to the
+        network by each model's bulk ``add_conns`` call, so this helper
+        must run before it.
+        """
+        self.conns['B1'] = Connection(
+            self.comps['hs_ff'], 'out1', self.comps['evap'], 'in1', 'B1'
+            )
+        self.conns['B2'] = Connection(
+            self.comps['evap'], 'out1', self.comps['hs_pump'], 'in1', 'B2'
+            )
+        self.conns['B3'] = Connection(
+            self.comps['hs_pump'], 'out1', self.comps['hs_bf'], 'in1', 'B3'
+            )
+
+    def parametrize_heat_source(self):
+        """Set starting values and parameters of the heat source subcycle."""
+        self.comps['hs_pump'].set_attr(eta_s=self.params['hs_pump']['eta_s'])
+        self.conns['B1'].set_attr(
+            T=self.params['B1']['T'], p=self.params['B1']['p'],
+            fluid={self.so: 1}
+            )
+        self.conns['B2'].set_attr(T=self.params['B2']['T'])
+        self.conns['B3'].set_attr(p=self.params['B1']['p'])
+
+    @property
+    def exergy_boundary(self):
+        """Connection labels bounding the system for the exergy analysis.
+
+        ``Q_cons`` is the heat delivered by the consumer, which only exists
+        in the exergy analysis, see :meth:`perform_exergy_analysis`.
+        """
+        return {
+            'fuel': {'inputs': ['E_grid', 'B1'], 'outputs': ['B3']},
+            'product': {'inputs': ['Q_cons'], 'outputs': []}
+            }
 
     def generate_components(self):
         """Initialize components of heat pump."""
@@ -173,15 +295,118 @@ class HeatPumpBase:
     def _solve_model(self, **kwargs):
         """Solve the model in design mode."""
         if 'iterinfo' in kwargs:
-            self.nw.set_attr(iterinfo=kwargs['iterinfo'])
+            self.nw.iterinfo = kwargs['iterinfo']
         self.nw.solve('design')
 
         if 'print_results' in kwargs:
             if kwargs['print_results']:
                 self.nw.print_results()
-        if self.nw.residual[-1] < 1e-3:
+        if self.nw.problem.residual[-1] < 1e-3:
             self.solved_design = True
             self._design_state = self.nw.save(as_dict=True)
+
+    def _solve_with_intercoolers(self, intercoolers, **kwargs):
+        """Solve the design case with the intercooler outlets specified.
+
+        Each intercooler changes its inlet temperature by ``dT_ic``, but never
+        closer than :data:`IC_MIN_SUPERHEAT` to the dew line at its outlet
+        pressure: ``T_out = max(T_in + dT_ic, T_dew + IC_MIN_SUPERHEAT)``.
+        Cooling across the dew line would make the next compressor take in
+        liquid, which the solver can only reconcile with the heat delivered
+        to the consumer by reversing the mass flow of the whole cycle.
+
+        Which bound applies depends on the actual compressor discharge
+        temperature, which is only known once the compressor efficiencies are
+        set. The starting values of the initial simulation are no guide to
+        it. So the model is solved with every outlet at the minimum superheat
+        first, which is feasible whenever the compressor discharges
+        superheated vapour, and re-solved with the temperature reference where
+        that leaves enough superheat. This is exact rather than iterative, as
+        nothing upstream of an intercooler depends on its outlet.
+
+        If even holding the outlet at the minimum superheat would take heat
+        from the ambient, there is nothing to cool. The intercooler is then
+        bypassed (``Q = 0`` and no pressure drop, which would otherwise
+        throttle the vapour towards the two-phase region) instead of heating
+        it, and the deviation from the intended operation is reported in
+        :attr:`model_warnings` and as an :class:`IntercoolerBypassWarning`.
+
+        A compressor discharging wet vapour is not bypassed but rejected:
+        dry refrigerants compressed from saturated vapour can end inside the
+        two-phase region, and no intercooler setting makes that a plausible
+        cycle.
+
+        Parameters
+        ----------
+        intercoolers : list of tuple
+            ``(conn_in, conn_out, ic_key, dT_ic, wf)`` per intercooler: the
+            labels of its inlet and outlet connection, its key in
+            ``self.comps``, the (negative) temperature change in K and the
+            working fluid passing through it.
+        """
+        subcritical = []
+        for conn_in, conn_out, ic_key, dT_ic, wf in intercoolers:
+            if self.conns[conn_out].p.val_SI < PSI('Pcrit', wf):
+                self.conns[conn_out].set_attr(td_dew=IC_MIN_SUPERHEAT)
+                subcritical.append((conn_in, conn_out, ic_key, dT_ic, wf))
+            else:
+                # Above the critical pressure there is no dew line to cross.
+                self.conns[conn_out].set_attr(
+                    T=Ref(self.conns[conn_in], 1, dT_ic)
+                    )
+
+        self._solve_model(**kwargs)
+        if not subcritical or self.nw.status > 1:
+            return
+
+        respecified = False
+        for conn_in, conn_out, ic_key, dT_ic, wf in subcritical:
+            inlet = self.conns[conn_in]
+            label = self.comps[ic_key].label
+            # Compare enthalpies, as a wet state sits at the saturation
+            # temperature of the higher discharge pressure and so still reads
+            # as superheated against the dew line at the outlet.
+            try:
+                h_dew = h_mix_pQ(inlet.p.val_SI, 1, inlet.fluid_data)
+                h_bubble = h_mix_pQ(inlet.p.val_SI, 0, inlet.fluid_data)
+            except ValueError:
+                pass
+            else:
+                if inlet.h.val_SI < h_dew - 1e-3 * (h_dew - h_bubble):
+                    raise ValueError(
+                        f'{inlet.source.label} discharges wet vapour into '
+                        + f'{label}. {PLAUSIBILITY_HINT}'
+                        )
+
+            T_dew = PSI('T', 'P', self.conns[conn_out].p.val_SI, 'Q', 1, wf)
+            if inlet.T.val_SI + dT_ic >= T_dew + IC_MIN_SUPERHEAT:
+                self.conns[conn_out].set_attr(
+                    td_dew=None, T=Ref(inlet, 1, dT_ic)
+                    )
+                respecified = True
+            elif self.comps[ic_key].Q.val_SI > 0:
+                # Holding the outlet at the minimum superheat would take heat
+                # from the ambient, also when the pressure drop alone cools
+                # the vapour below it.
+                superheat = inlet.T.val_SI - PSI(
+                    'T', 'P', inlet.p.val_SI, 'Q', 1, wf
+                    )
+                self.conns[conn_out].set_attr(td_dew=None)
+                self.comps[ic_key].set_attr(Q=0, pr=1)
+                msg = (
+                    f'{label}: the compressor discharge is only '
+                    + f'{superheat:.2f} K superheated, which leaves nothing to '
+                    + f'cool while staying {IC_MIN_SUPERHEAT} K above the dew '
+                    + 'line, so the intercooler is bypassed (no heat transfer, '
+                    + 'no pressure drop) and the model does not run as '
+                    + 'designed.'
+                    )
+                self.model_warnings.append(msg)
+                warnings.warn(msg, IntercoolerBypassWarning, stacklevel=2)
+                respecified = True
+
+        if respecified:
+            self._solve_model(**kwargs)
 
     def calc_efficiencies(self):
         """Calculate ideal and simulated cycle efficiencies."""
@@ -219,6 +444,7 @@ class HeatPumpBase:
 
     def run_model(self, print_cop=False, exergy_analysis=True, **kwargs):
         """Run the initialization and design simulation routine."""
+        self.model_warnings = []
         self.generate_components()
         self.generate_connections()
         self.init_simulation(**kwargs)
@@ -428,21 +654,30 @@ class HeatPumpBase:
 
     def perform_exergy_analysis(self, print_results=False, **kwargs):
         """Perform exergy analysis."""
-        # exerpy's ``Condenser`` class models a purely *dissipative*
-        # condenser (heat rejected to ambient, as in a Rankine cycle): it
-        # sets E_F = E_P = NaN and counts the whole hot-side exergy drop as
-        # destruction. In a heat pump every ``Condenser`` (main ``cond`` and
-        # the cascade ``inter`` HX) instead delivers useful heat, so it must
-        # be analysed as a productive heat exchanger. Map tespy ``Condenser``
-        # to exerpy's productive ``HeatExchanger`` so component exergy
-        # destructions sum to the system total. This leaves the tespy
-        # thermodynamic model untouched (idempotent module-level config).
-        EXERPY_TESPY_MAPPINGS['Condenser'] = 'HeatExchanger'
-        self.ean = ExergyAnalysis.from_tespy(
-            self.nw,
-            Tamb=self.params['ambient']['T'] + 273.15,
-            pamb=self.params['ambient']['p'] * 1e5
+        Tamb = self.params['ambient']['T'] + 273.15
+        pamb = self.params['ambient']['p'] * 1e5
+        data = to_exerpy(self.nw, Tamb, pamb)
+        data['connections']['Q_cons'] = {
+            'source_component': self.comps['cons'].label,
+            'source_connector': 1,
+            'target_component': 'Heat Output',
+            'target_connector': 999,
+            'kind': 'heat',
+            'energy_flow': self.heat_output
+            }
+        data, Tamb, pamb, chemExLib, split_physical_exergy = _process_json(
+            data, Tamb, pamb, None, True
             )
+        self.ean = ExergyAnalysis(
+            data['components'], data['connections'], Tamb, pamb, chemExLib,
+            split_physical_exergy
+            )
+        # exerpy's TESPy parser drops the ``dissipative`` flag, so pass it on.
+        for comp in self.nw.comps['object']:
+            dissipative = getattr(comp, 'dissipative', None)
+            if (dissipative is not None and dissipative.val is not None
+                    and comp.label in self.ean.components):
+                self.ean.components[comp.label].dissipative = dissipative.val
         self.ean.analyse(
             E_F=self.exergy_boundary['fuel'],
             E_P=self.exergy_boundary['product']
@@ -744,22 +979,184 @@ class HeatPumpBase:
         if return_diagram:
             return diagram
 
-    def generate_sankey_diagram(self, width=None, height=None):
-        """Sankey Diagram of Heat Pump model.
+    def generate_sankey_diagram(self, width=None, height=None, mode=1,
+                                collapse_passthroughs=True, groups=None,
+                                colors=None, label_map=None,
+                                fuel_label='Fuel Exergy',
+                                product_label='Product Exergy',
+                                destruction_label='Exergy Destruction',
+                                loss_label='Exergy Loss', net_suffix='(net)'):
+        """Generate Sankey (Grassmann) diagram of the exergy analysis.
 
-        TODO: exerpy (the replacement for tespy's removed ExergyAnalysis)
-        has no equivalent of the old ``generate_plotly_sankey_input`` method,
-        so this currently returns an empty placeholder figure.
+        The node and link topology comes from exerpy's ``SankeyBuilder``,
+        the styling and labelling is applied here so the diagram matches
+        the rest of the project's plots.
+
+        Parameters
+        ----------
+        width : number, optional
+            Width of the figure in pixels. If `None`, plotly decides.
+
+        height : number, optional
+            Height of the figure in pixels. If `None`, plotly decides.
+
+        mode : int
+            Level of detail of the material links. `1` shows the total
+            exergy flow per connection, `2` splits it into physical and
+            chemical exergy and `3` into thermal, mechanical and chemical
+            exergy. Default is `1`.
+
+        collapse_passthroughs : bool or list of str
+            If `True`, pure pass-through components (the cycle closers) are
+            hidden. If a list, only the given component types are hidden.
+            Default is `True`.
+
+        groups : dict, optional
+            Mapping of a group name to a list of component labels that are
+            aggregated into a single node, e.g.
+            ``{'Drives': ['Compressor Motor']}``. Connections inside a group
+            are dropped.
+
+        colors : dict, optional
+            Colors of the flow categories and nodes. Missing keys fall back
+            to :data:`SANKEY_COLORS`. Supported keys are `'E_F'`, `'E_P'`,
+            `'E_D'`, `'E_L'`, `'work'`, `'heat'`, `'two-phase-fluid'` and
+            `'node'`.
+
+        label_map : dict, optional
+            Mapping from English component labels to translated labels used
+            as node labels. Labels not present in the map are shown
+            unchanged. If `None`, original labels are used.
+
+        fuel_label : str, optional
+            Display label of the fuel exergy node. Default is
+            'Fuel Exergy'.
+
+        product_label : str, optional
+            Display label of the product exergy node. Default is
+            'Product Exergy'.
+
+        destruction_label : str, optional
+            Display label of the exergy destruction node. Default is
+            'Exergy Destruction'.
+
+        loss_label : str, optional
+            Display label of the exergy loss node. Default is
+            'Exergy Loss'.
+
+        net_suffix : str, optional
+            Suffix appended to the product or loss label of the intermediate
+            node exerpy inserts when that boundary has both inputs and
+            outputs. Default is '(net)'.
         """
-        fig = go.Figure(go.Sankey(arrangement='snap', node={}, link={}))
+        colors = {**SANKEY_COLORS, **(colors or {})}
+
+        nodes, links = SankeyBuilder(
+            self.ean, mode=mode,
+            collapse_passthroughs=collapse_passthroughs, groups=groups
+            ).build()
+
+        nodes, links = self._prune_sankey_nodes(nodes, links)
+
+        terminal_labels = {
+            'E_F': fuel_label, 'E_P': product_label,
+            'E_D': destruction_label, 'E_L': loss_label
+            }
+        node_labels = []
+        for node in nodes:
+            terminal = SANKEY_TERMINAL_IDS.get(node['id'])
+            if terminal is None:
+                node_labels.append(
+                    label_map.get(node['id'], node['label']) if label_map
+                    else node['label']
+                    )
+            elif node['id'].endswith('_net__'):
+                node_labels.append(f'{terminal_labels[terminal]} {net_suffix}')
+            else:
+                node_labels.append(terminal_labels[terminal])
+
+        fig = go.Figure(
+            go.Sankey(
+                arrangement='snap',
+                node={
+                    'label': node_labels,
+                    'pad': 15,
+                    'color': colors['node']
+                    },
+                link={
+                    'source': [link['source'] for link in links],
+                    'target': [link['target'] for link in links],
+                    'value': [link['value'] for link in links],
+                    'label': [link.get('label', '') for link in links],
+                    'color': [
+                        self._sankey_link_color(link, nodes, colors)
+                        for link in links
+                        ]
+                    }
+            )
+        )
 
         if width is not None:
             fig.update_layout(width=width)
 
         if height is not None:
-            fig.update_layout(width=height)
+            fig.update_layout(height=height)
 
         return fig
+
+    @staticmethod
+    def _prune_sankey_nodes(nodes, links):
+        """Drop nodes without any link and reindex the remaining links.
+
+        Heat pumps have no exergy loss boundary, so exerpy's unconditional
+        `E_L` node would otherwise dangle in the diagram.
+        """
+        connected = set()
+        for link in links:
+            connected.update((link['source'], link['target']))
+
+        kept = [i for i in range(len(nodes)) if i in connected]
+        reindex = {old: new for new, old in enumerate(kept)}
+
+        return (
+            [nodes[i] for i in kept],
+            [
+                {**link,
+                 'source': reindex[link['source']],
+                 'target': reindex[link['target']]}
+                for link in links
+                ]
+            )
+
+    def _sankey_link_color(self, link, nodes, colors):
+        """Determine the color of a single Sankey link."""
+        source_id = nodes[link['source']]['id']
+        target_id = nodes[link['target']]['id']
+
+        if target_id == '__E_D__':
+            return colors['E_D']
+        for node_id in (source_id, target_id):
+            terminal = SANKEY_TERMINAL_IDS.get(node_id)
+            if terminal is not None:
+                return colors[terminal]
+
+        # Link labels are emitted as ``"<conn_id> [<tag>]: <value> kW"``,
+        # which is the only handle on the underlying exergy flow. exerpy
+        # appends ``" (reversed)"`` to a link carrying negative exergy, which
+        # it draws against its declared direction.
+        label = link.get('label', '')
+        conn_id = label.split(' [')[0]
+        kind = self.ean.connections.get(conn_id, {}).get('kind')
+        if kind == 'power':
+            color = colors['work']
+        elif kind == 'heat':
+            color = colors['heat']
+        else:
+            color = colors['two-phase-fluid']
+
+        if label.endswith('(reversed)'):
+            return pale(color)
+        return color
 
     def generate_waterfall_diagram(self, figsize=(16, 10), legend=True,
                                    return_fig_ax=False, show_epsilon=True,
@@ -1385,17 +1782,17 @@ class HeatPumpBase:
         self.check_thermodynamic_results()
 
     def check_thermodynamic_results(self):
-        """Perform thermodynamic checks of the main cycle components."""
-        if self.nw.status == 0:
-            return
-        elif self.nw.status > 1:
+        """Perform thermodynamic checks of the main cycle components.
+
+        The checks also run on a cleanly converged network (status 0). A
+        converged solution need not be a physical one: a cycle can satisfy
+        every equation while running backwards with negative mass flows.
+        """
+        if self.nw.status > 1:
             msg = "An unexpected error occured in the simulation."
             raise ValueError(msg)
 
-        user_help_prompt = (
-            'Please check the heat pump parameters and model for thermodynamic'
-            + ' plausibility.'
-        )
+        user_help_prompt = PLAUSIBILITY_HINT
 
         mask_neg_m_dot = self.nw.results['Connection']['m'] < 0
         if any(mask_neg_m_dot):
@@ -1442,7 +1839,7 @@ class HeatPumpBase:
             mask_heatex_neg_ttd_l = (
                 self.nw.results['HeatExchanger']['ttd_l'] <= 0
             )
-            if any(mask_heatex_neg_ttd_u):
+            if any(mask_heatex_neg_ttd_l):
                 heatex_neg_ttd_l = [
                     idx for idx
                     in self.nw.results['HeatExchanger'].loc[
@@ -1488,7 +1885,7 @@ class HeatPumpBase:
             mask_cond_neg_ttd_l = (
                 self.nw.results['Condenser']['ttd_l'] <= 0
             )
-            if any(mask_cond_neg_ttd_u):
+            if any(mask_cond_neg_ttd_l):
                 cond_neg_ttd_l = [
                     idx for idx
                     in self.nw.results['Condenser'].loc[
@@ -1528,6 +1925,37 @@ class HeatPumpBase:
                     f'Pressure ratio in Compressor(s) {comp_neg_pr} is '
                     + f'not positive. {user_help_prompt}'
                 )
+
+        comp_wet_inlet = []
+        for comp in self.nw.comps['object']:
+            if not isinstance(comp, Compressor):
+                continue
+            inlet = comp.inl[0]
+            try:
+                h_dew = h_mix_pQ(inlet.p.val_SI, 1, inlet.fluid_data)
+                h_bubble = h_mix_pQ(inlet.p.val_SI, 0, inlet.fluid_data)
+            except ValueError:
+                continue
+            if inlet.h.val_SI < h_dew - 1e-3 * (h_dew - h_bubble):
+                comp_wet_inlet.append(comp.label)
+        if comp_wet_inlet:
+            raise ValueError(
+                f'Inlet of Compressor(s) {comp_wet_inlet} is not vapour. '
+                + user_help_prompt
+            )
+
+        dissipative_pos_Q_dot = [
+            comp.label for comp in self.nw.comps['object']
+            if isinstance(comp, SimpleHeatExchanger)
+            and comp.dissipative.val
+            and comp.Q.val_SI > 1e-3
+        ]
+        if dissipative_pos_Q_dot:
+            raise ValueError(
+                f'Heat flow in dissipative heat exchanger(s) '
+                + f'{dissipative_pos_Q_dot} is positive, i.e. heat is taken '
+                + f'from the ambient. {user_help_prompt}'
+            )
 
     def offdesign_simulation(self, log_simulations=False):
         """Perform offdesign parametrization and simulation."""
@@ -1651,8 +2079,8 @@ class HeatPumpBase:
                 + f'{revisit_tag} ###'
             )
             self.conns['B1'].set_attr(T=T_hs_ff)
-            if T_hs_ff <= 7:
-                self.conns['B2'].set_attr(T=2)
+            if not self._source_is_gaseous() and T_hs_ff <= 7:
+                self.conns['B2'].set_attr(T=2)  # liquid-water freeze guard
             else:
                 self.conns['B2'].set_attr(T=T_hs_ff - deltaT_hs)
             self.conns['C3'].set_attr(T=T_cons_ff)
@@ -1714,7 +2142,7 @@ class HeatPumpBase:
                 log_entry = (
                         f'{timestamp};{converged};'
                         + f'{T_hs_ff:.2f};{T_cons_ff:.2f};{pl:.1f};'
-                        + f'{self.nw.residual_history[-1]:.2e};'
+                        + f'{self.nw.problem.residual_history[-1]:.2e};'
                         + f'{i + 1};{is_new}\n'
                 )
                 if not os.path.exists(logpath):
@@ -1742,7 +2170,9 @@ class HeatPumpBase:
                     results_offdesign.loc[idx, 'Q']
                     / results_offdesign.loc[idx, 'P']
             )
-            results_offdesign.loc[idx, 'residual'] = self.nw.residual_history[-1]
+            results_offdesign.loc[idx, 'residual'] = (
+                self.nw.problem.residual_history[-1]
+            )
 
         if self.params['offdesign']['save_results']:
             cache_dir = platformdirs.user_cache_dir('heatpumps', 'heatpumps')
@@ -1760,14 +2190,17 @@ class HeatPumpBase:
         pass
 
     def get_compressor_results(self):
-        """Return key results for each compressor used in the heat pump."""
+        """Return key results for each compressor used in the heat pump.
+
+        The heat source recirculation device is skipped.
+        """
         results = {}
-        for c in self.comps.values():
-            if 'Compressor' in c.label:
+        for key, c in self.comps.items():
+            if isinstance(c, Compressor) and key != 'hs_pump':
                 comp = c.label
                 results[comp] = {}
 
-                results[comp]['V_dot'] = c.inl[0].vol.val_SI * 3600
+                results[comp]['V_dot'] = c.inl[0].v.val_SI * 3600
                 results[comp]['p_in'] = c.inl[0].p.val
                 results[comp]['p_out'] = c.outl[0].p.val
                 results[comp]['PI'] = c.outl[0].p.val / c.inl[0].p.val

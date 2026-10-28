@@ -2,14 +2,109 @@
 What's new?
 ~~~~~~~~~~~
 
-v1.5.0 -- XXXXXXXXXX XXXXXXXXXX (Jun XX, 2026)
-==============================================
+
+v1.5.3 -- Performant Polyglot (Xxx XX, XXXX)
+============================================
+
+New Features
+------------
+
+- The terminal temperature differences of evaporators, condensers,
+  transcritical heat exchangers, cascade intermediate heat exchangers, and
+  closed economizers can now be set in the dashboard
+
+Improvements
+------------
+
+- Add preliminary value for 2024 average CEPCI
+
+Fixes
+-----
+
+- Fix typos
+- Fix wrongly declared economizer injection ``Merge`` components in
+  ``HeatPumpCascadeEcon``
+
+Contributors
+------------
+
+- `@jfreissmann <https://github.com/jfreissmann>`__
+
+**Full changelog:** `v1.5.2...v1.5.3 <https://github.com/jfreissmann/heatpumps/compare/v1.5.2...v1.5.3>`__
+
+
+v1.5.2 -- Performant Polyglot (Oct 9, 2026)
+===========================================
+
+New Features
+------------
+
+- Add R32 as a usable refrigerant for the heat pump models and dashboard
+
+Improvements
+------------
+
+- Improve how intercoolers check against the dew line and how much cooling can
+  be reasonably applied
+
+Fixes
+-----
+
+- Fix wrong usage of low-temperature cycle connection (``'D8'`` is right,
+  ``'D9'`` was used) for setting saturated vapor state in parallel compression
+  cascade cycles (``HeatPumpCascadePC`` and ``HeatPumpCascadePCTrans``)
+- Fix a bug in the thermodynamic check after solving regarding a mix-up between
+  upper and lower terminal temperature difference
+- Fix critical temperature value of R124
+- Fix CoolProp name of R1233zd(E)
+
+Contributors
+------------
+
+- `@jfreissmann <https://github.com/jfreissmann>`__
+
+**Full changelog:** `v1.5.1...v1.5.2 <https://github.com/jfreissmann/heatpumps/compare/v1.5.1...v1.5.2>`__
+
+
+v1.5.1 -- Performant Polyglot (Sep 30, 2026)
+============================================
+
+Improvements
+------------
+
+- The model classes are adjusted to work with TESPy ``>= v0.11``
+    - Simulations can be faster
+    - Part-load simulation is more stable
+
+
+Fixes
+-----
+
+- Improve session state handling for language data
+
+Contributors
+------------
+
+- `@jfreissmann <https://github.com/jfreissmann>`__
+- `@fwitte <https://github.com/fwitte>`__
+
+**Full changelog:** `v1.5.0...v1.5.1 <https://github.com/jfreissmann/heatpumps/compare/v1.5.0...v1.5.1>`__
+
+
+v1.5.0 -- Performant Polyglot (Sep 29, 2026)
+============================================
 
 New Features
 ------------
 
 - heatpumps' dashboard now has english and german language modes
 - Other languages can be added easily due to modular translation structure
+- The dashboard can export models as JSON, which can be used to initialize a
+  model class in python or a plain TESPy model
+- heatpumps now supports air-source heat pumps
+- The Grassmann diagram of the exergy analysis is back
+  (``generate_sankey_diagram``), now built on
+  `exerpy <https://github.com/oemof/exerpy>`__'s visualization module
 
 Improvements
 ------------
@@ -17,16 +112,20 @@ Improvements
 - The model classes are adjusted to work with TESPy ``>= v0.10``
     - Make use of ``PowerConnection`` cpmponents
     - Use `exerpy <https://github.com/oemof/exerpy>`__ for exergy analysis
+      (requires exerpy ``v0.0.11``)
     - Save stable values as dicts in memory instead of cached files
     - Simulations can be faster
 - Add more flexibility for plotting labels (axes, title, legends)
 - Some instruction text was updated
+- Add documentation for ``from_json`` method
+- Reduced code duplication
 
 Fixes
 -----
 
 - Fix the few failing heat pump setups (improved parameters and
   `init_simulation`)
+- Handle error in dashboard if no or just a few part-load simulations converge
 
 Contributors
 ------------
@@ -34,6 +133,8 @@ Contributors
 - `@jfreissmann <https://github.com/jfreissmann>`__
 - `@fwitte <https://github.com/fwitte>`__
 - `@maltefritz <https://github.com/maltefritz>`__
+- `@HaSchneider <https://github.com/HaSchneider>`__ (Thanks for your first
+  contribution!)
 
 **Full changelog:** `v1.4.1...v1.5.0 <https://github.com/jfreissmann/heatpumps/compare/v1.4.1...v1.5.0>`__
 

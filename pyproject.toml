@@ -5,7 +5,7 @@ build-backend = "flit_core.buildapi"
 [project]
 name = "heatpumps"
 description = "Collection of TESPy heat pump models and additional Streamlit dashboard."
-version = "1.4.1"
+dynamic = ["version"]
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
@@ -17,9 +17,9 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
 ]
 dependencies = [
-    "coolprop>=6.4.1",
+    "coolprop>=6.8",
     "darkdetect>=0.8.0",
-    "exerpy>=0.0.7",
+    "exerpy>=0.0.11,<0.0.12",
     "fluprodia",
     "matplotlib>=3.6.3",
     "numpy>=1.24.0",
@@ -29,7 +29,7 @@ dependencies = [
     "scikit-learn>=1.2.1",
     "scipy>=1.10.0",
     "streamlit>=1.47.0,<2.0.0",
-    "tespy>=0.10.0,<0.11.0",
+    "tespy>=0.11.0,<0.12.0",
 ]
 
 [project.optional-dependencies]
