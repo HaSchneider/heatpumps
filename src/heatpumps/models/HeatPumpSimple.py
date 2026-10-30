@@ -154,7 +154,9 @@ class HeatPumpSimple(HeatPumpBase):
             )
 
         # Main cycle
-        self.conns['A3'].set_attr(x=self.params['A3']['x'], p=p_evap)
+        self.conns['A3'].set_attr( 
+            T= Ref( self.conns['B1'], 1, -self.params['evap']['ttd_l']) ,
+            p=p_evap)
         self.conns['A0'].set_attr(p=p_cond, fluid={self.wf: 1})
         # Heat source
         self.parametrize_heat_source()
